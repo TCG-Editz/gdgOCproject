@@ -18,7 +18,7 @@ export default function EventsPage() {
     <div className="container mx-auto">
       <div className="mb-12">
         <h1 className="font-headline text-4xl font-extrabold tracking-tight lg:text-5xl">
-          Yash - mitra Events (Band baja barat)
+          Current/Upcoming Events
         </h1>
         <p className="mt-3 text-xl text-foreground/70">
           Workshops, seminars, and fests happening around you.
