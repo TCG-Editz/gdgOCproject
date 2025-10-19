@@ -91,9 +91,9 @@ export const initialClubs: Club[] = [
   },
   {
     id: "club-3",
-    name: "Nritya - The Dance Society",
-    category: "Arts & Culture",
-    description: "Celebrating diverse Indian and Western dance forms. Open to all skill levels.",
+    name: "Goonj Band",
+    category: "Music",
+    description: "Celebrating diverse Indian and Western music forms. Open to all skill levels.",
     imageId: "club-3",
   },
   {

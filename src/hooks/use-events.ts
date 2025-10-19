@@ -1,25 +1,31 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
 import { initialEvents, type CampusEvent } from '../lib/data';
 
 const EVENTS_STORAGE_KEY = 'oncampus-events';
+const EVENTS_VERSION_KEY = 'oncampus-events-version';
+
+// simple checksum based on JSON length
+const generateChecksum = (data: any) => JSON.stringify(data).length;
 
 export const useEvents = () => {
     const [events, setEvents] = useState<CampusEvent[]>(initialEvents);
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        // This effect runs only on the client after hydration
         try {
             const storedEvents = localStorage.getItem(EVENTS_STORAGE_KEY);
-            if (storedEvents) {
-                setEvents(JSON.parse(storedEvents));
-            } else {
-                // If nothing in storage, initialize it with mock data
+            const storedVersion = localStorage.getItem(EVENTS_VERSION_KEY);
+            const newVersion = String(generateChecksum(initialEvents));
+
+            // if no events stored OR version changed → reload from defaults
+            if (!storedEvents || storedVersion !== newVersion) {
                 localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(initialEvents));
+                localStorage.setItem(EVENTS_VERSION_KEY, newVersion);
                 setEvents(initialEvents);
+            } else {
+                setEvents(JSON.parse(storedEvents));
             }
         } catch (error) {
             console.error("Failed to access or parse events from localStorage", error);
@@ -53,8 +59,6 @@ export const useEvents = () => {
         });
     }, [isInitialized]);
 
-    // Return an empty array until the client-side has initialized
-    // to prevent hydration mismatches.
     const safeEvents = isInitialized ? events : [];
 
     return { events: safeEvents, addEvent, removeEvent, isInitialized };

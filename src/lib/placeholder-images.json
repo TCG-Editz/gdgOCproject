@@ -50,9 +50,9 @@
     },
     {
       "id": "club-3",
-      "description": "A group of people performing a traditional Indian dance.",
+      "description": "A group of people performing traditional Indian music.",
       "imageUrl": "https://images.unsplash.com/photo-1692663576178-be5ea950bcac?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxkYW5jZSUyMHBlcmZvcm1hbmNlfGVufDB8fHx8MTc2MDc3MTAwMXww&ixlib=rb-4.1.0&q=80&w=1080",
-      "imageHint": "dance performance"
+      "imageHint": "music performance"
     },
     {
       "id": "club-4",
