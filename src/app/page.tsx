@@ -137,18 +137,50 @@ export default function Home() {
 
       </main>
 
-      <footer className="bg-gray-100 dark:bg-gray-900">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="flex items-center gap-2">
-              <Icons.logo />
-            </div>
-            <p className="text-sm text-foreground/60 mt-4 md:mt-0">
-              © {new Date().getFullYear()} OnCampus. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </footer>
+      <footer className="bg-gray-100 dark:bg-gray-900 border-t border-border/40">
+  <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+      {/* Left: Logo */}
+      <div className="flex items-center gap-2">
+        <Icons.logo />
+      </div>
+
+      {/* Right: Text */}
+      <div className="text-center md:text-right">
+        <p className="text-sm text-foreground/60">
+          © {new Date().getFullYear()} GDGoC IET DAVV.  All rights reserved.
+        </p>
+        <p className="text-sm text-foreground/60 mt-1">
+          Crafted with ❤️ by{" "}
+          <Link
+            href="https://www.linkedin.com/in/prakrat-porwal-4688b3385?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app"
+            target="_blank"
+            className="text-primary font-medium hover:underline transition-colors"
+          >
+            Prakrat
+          </Link>
+          {", "}
+          <Link
+            href="https://www.linkedin.com/in/manan-chimnani?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app"
+            target="_blank"
+            className="text-primary font-medium hover:underline transition-colors"
+          >
+            Manan
+          </Link>
+          {" & "}
+          <Link
+            href="https://www.linkedin.com/in/atharv-porwal-354149381?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app"
+            target="_blank"
+            className="text-primary font-medium hover:underline transition-colors"
+          >
+            Atharv
+          </Link>
+        </p>
+      </div>
+    </div>
+  </div>
+</footer>
+
     </div>
   );
 }
