@@ -59,7 +59,7 @@ export default function Home() {
                   <span className="text-primary">Supercharged</span>.
                 </h1>
                 <p className="max-w-xl text-lg text-foreground/80">
-                  Welcome to OnCampus India! The single platform to discover student benefits, join exciting clubs, and never miss an event. Powered by AI to personalize your campus experience.
+                  Welcome to OnCampus IET DAVV! The single platform to discover student benefits, join exciting clubs, and never miss an event.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Button size="lg" asChild>
