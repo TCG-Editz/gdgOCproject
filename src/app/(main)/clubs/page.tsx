@@ -59,7 +59,16 @@ export default function ClubsPage() {
                 </CardHeader>
                 <CardContent className="flex-grow flex flex-col">
                   <p className="text-sm text-foreground/80 flex-grow">{club.description}</p>
-                  <Button className="mt-4 w-full">Join Club</Button>
+                  {club.redirectUrl && (
+                    <Button
+                      asChild
+                      className="mt-4 w-full bg-primary/90 text-primary-foreground hover:bg-primary/100 backdrop-blur-lg border border-primary/30 transition-all duration-300"
+                    >
+                      <Link href={club.redirectUrl} target="_blank" rel="noopener noreferrer">
+                        Join Club
+                      </Link>
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             );

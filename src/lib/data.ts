@@ -15,6 +15,7 @@ export type Club = {
   category: string;
   description: string;
   imageId: string;
+  redirectUrl: string;
 };
 
 export type CampusEvent = {
@@ -81,6 +82,7 @@ export const initialClubs: Club[] = [
     category: "Technology",
     description: "A community for programmers to collaborate on projects, participate in hackathons, and learn new technologies.",
     imageId: "club-1",
+    redirectUrl: ""
   },
   {
     id: "club-2",
@@ -88,6 +90,7 @@ export const initialClubs: Club[] = [
     category: "Business",
     description: "Fostering the spirit of entrepreneurship through workshops, speaker sessions, and startup competitions.",
     imageId: "club-2",
+    redirectUrl: "https://www.instagram.com/ecell_ietdavv/?hl=en"
   },
   {
     id: "club-3",
@@ -95,6 +98,7 @@ export const initialClubs: Club[] = [
     category: "Music",
     description: "Celebrating diverse Indian and Western music forms. Open to all skill levels.",
     imageId: "club-3",
+    redirectUrl: "https://www.instagram.com/goonjtherockband/?__d=1"
   },
   {
     id: "club-4",
@@ -102,6 +106,7 @@ export const initialClubs: Club[] = [
     category: "Arts & Culture",
     description: "For enthusiasts of photography and videography. Join us for photo walks, workshops, and exhibitions.",
     imageId: "club-4",
+    redirectUrl: ""
   },
   {
     id: "club-5",
@@ -109,6 +114,7 @@ export const initialClubs: Club[] = [
     category: "Literary",
     description: "Hone your public speaking and critical thinking skills. Participate in parliamentary debates and MUNs.",
     imageId: "club-5",
+    redirectUrl: ""
   },
 ];
 
