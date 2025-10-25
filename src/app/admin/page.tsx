@@ -20,8 +20,6 @@ import AdminClubsTab from "../../components/admin-clubs-tab";
 import AdminBenefitsTab from "../../components/admin-benefits-tab";
 import { supabase } from "../../lib/supabaseClient";
 
-export const dynamic = 'force-dynamic';
-
 
 export default function AdminPage() {
   const router = useRouter();

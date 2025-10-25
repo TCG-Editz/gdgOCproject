@@ -29,8 +29,6 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient";
 
-export const dynamic = 'force-dynamic';
-
 
 const FormSchema = z.object({
   email: z.string().email("Please enter a valid email address."),
