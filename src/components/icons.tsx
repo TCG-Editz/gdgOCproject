@@ -1,14 +1,24 @@
-import Image from "next/image";
-import type { SVGProps } from "react";
+import type { HTMLAttributes } from "react";
 
 export const Icons = {
-  logo: (props: Omit<React.ComponentProps<typeof Image>, 'src' | 'alt'>) => (
-    <Image
-      src="/image/OnCampuslogo.png"
-      alt="OnCampus Logo"
-      width={129}
-      height={26}
-      {...props}
-    />
+  logo: (props: HTMLAttributes<HTMLSpanElement>) => (
+    <span
+      className="font-headline font-bold text-xl sm:text-2xl"
+      {...props} // ✅ Correct type for <span>
+    >
+      <span style={{ color: "#4285F4" }}>&lt;</span>
+      <span> </span>
+      <span style={{ color: "#DB4437" }}>O</span>
+      <span style={{ color: "#F4B400" }}>N</span>
+      <span> </span>
+      <span style={{ color: "#4285F4" }}>C</span>
+      <span style={{ color: "#0F9D58" }}>A</span>
+      <span style={{ color: "#DB4437" }}>M</span>
+      <span style={{ color: "#F4B400" }}>P</span>
+      <span style={{ color: "#4285F4" }}>U</span>
+      <span style={{ color: "#0F9D58" }}>S</span>
+      <span> </span>
+      <span style={{ color: "#0F9D58" }}>&gt;</span>
+    </span>
   ),
 };

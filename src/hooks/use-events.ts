@@ -1,65 +1,117 @@
-"use client";
+
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { initialEvents, type CampusEvent } from '../lib/data';
+import { supabase } from '../lib/supabaseClient';
+import imageCompression from 'browser-image-compression';
 
-const EVENTS_STORAGE_KEY = 'oncampus-events';
-const EVENTS_VERSION_KEY = 'oncampus-events-version';
+export interface CampusEvent {
+  id: string;
+  created_at: string;
+  title: string;
+  date: string;
+  location: string;
+  description: string;
+  imageUrl: string;
+}
 
-// simple checksum based on JSON length
-const generateChecksum = (data: any) => JSON.stringify(data).length;
+const uploadImage = async (file: File): Promise<string> => {
+    const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true,
+    }
 
-export const useEvents = () => {
-    const [events, setEvents] = useState<CampusEvent[]>(initialEvents);
+    const compressedFile = await imageCompression(file, options);
+    
+    const filePath = `events/${Date.now()}-${compressedFile.name}`;
+    const { data, error } = await supabase.storage
+        .from('images')
+        .upload(filePath, compressedFile);
+
+    if (error) {
+        console.error('Error uploading image:', error);
+        throw error;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(data.path);
+    return publicUrl;
+};
+
+export function useEvents() {
+    const [data, setData] = useState<CampusEvent[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<Error | null>(null);
     const [isInitialized, setIsInitialized] = useState(false);
 
-    useEffect(() => {
-        try {
-            const storedEvents = localStorage.getItem(EVENTS_STORAGE_KEY);
-            const storedVersion = localStorage.getItem(EVENTS_VERSION_KEY);
-            const newVersion = String(generateChecksum(initialEvents));
+    const fetchEvents = useCallback(async () => {
+        setIsLoading(true);
+        const { data, error } = await supabase
+            .from('events')
+            .select('*')
+            .order('date', { ascending: true });
 
-            // if no events stored OR version changed → reload from defaults
-            if (!storedEvents || storedVersion !== newVersion) {
-                localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(initialEvents));
-                localStorage.setItem(EVENTS_VERSION_KEY, newVersion);
-                setEvents(initialEvents);
-            } else {
-                setEvents(JSON.parse(storedEvents));
-            }
-        } catch (error) {
-            console.error("Failed to access or parse events from localStorage", error);
-            setEvents(initialEvents);
+        if (error) {
+            console.error("Error fetching events:", error);
+            setError(error as unknown as Error);
+        } else {
+            setData(data as CampusEvent[]);
         }
-        setIsInitialized(true);
-    }, []);
-
-    const addEvent = useCallback((newEventData: Omit<CampusEvent, 'id'>) => {
-        if (!isInitialized) return;
-
-        setEvents(prevEvents => {
-            const newEvent: CampusEvent = {
-                ...newEventData,
-                id: new Date().toISOString(),
-                imageId: newEventData.imageId || `event-${Math.floor(Math.random() * 3) + 1}`,
-            };
-            const updatedEvents = [...prevEvents, newEvent];
-            localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(updatedEvents));
-            return updatedEvents;
-        });
+        setIsLoading(false);
+        if (!isInitialized) setIsInitialized(true);
     }, [isInitialized]);
+
+    useEffect(() => {
+        fetchEvents();
+    }, [fetchEvents]);
+
+    const add = async (event: Omit<CampusEvent, 'id' | 'imageUrl' | 'created_at' >, imageFile: File) => {
+        const imageUrl = await uploadImage(imageFile);
+        const { data: newData, error } = await supabase
+            .from('events')
+            .insert([{ ...event, imageUrl }])
+            .select()
+            .single();
+
+        if (error) throw error;
+        if (newData) {
+            setData(prevData => [...prevData, newData].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+        }
+    };
     
-    const removeEvent = useCallback((eventId: string) => {
-        if (!isInitialized) return;
+    const remove = async (id: string) => {
+        const { error } = await supabase.from('events').delete().eq('id', id);
+        if (error) throw error;
+        fetchEvents(); // Refetch
+    };
 
-        setEvents(prevEvents => {
-            const updatedEvents = prevEvents.filter(e => e.id !== eventId);
-            localStorage.setItem(EVENTS_STORAGE_KEY, JSON.stringify(updatedEvents));
-            return updatedEvents;
-        });
-    }, [isInitialized]);
+    const update = async (id: string, event: Partial<Omit<CampusEvent, 'id' | 'created_at'>>, imageFile?: File) => {
+        let finalImageUrl = event.imageUrl;
+        if (imageFile) {
+            finalImageUrl = await uploadImage(imageFile);
+        }
 
-    const safeEvents = isInitialized ? events : [];
+        const { data: updatedData, error } = await supabase
+            .from('events')
+            .update({ ...event, imageUrl: finalImageUrl })
+            .eq('id', id)
+            .select()
+            .single();
 
-    return { events: safeEvents, addEvent, removeEvent, isInitialized };
-};
+        if (error) throw error;
+        if(updatedData) {
+            setData(prevData => prevData.map(item => item.id === id ? updatedData : item)
+              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+        }
+    };
+
+  return {
+    data,
+    isLoading,
+    error,
+    isInitialized,
+    add,
+    remove,
+    update,
+  };
+}

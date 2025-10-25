@@ -1,66 +1,114 @@
-"use client";
+
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { initialBenefits, type Benefit } from '../lib/data';
+import { supabase } from '../lib/supabaseClient';
+import imageCompression from 'browser-image-compression';
 
-const BENEFITS_STORAGE_KEY = 'oncampus-benefits';
-const BENEFITS_VERSION_KEY = 'oncampus-benefits-version';
+export interface Benefit {
+  id: string;
+  created_at: string;
+  title: string;
+  provider: string;
+  description: string;
+  category: string;
+  imageUrl: string;
+  redirectUrl?: string;
+}
 
-// Simple checksum based on JSON length
-const generateChecksum = (data: any) => JSON.stringify(data).length;
+const uploadImage = async (file: File): Promise<string> => {
+    const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true,
+    }
+    
+    const compressedFile = await imageCompression(file, options);
 
-export const useBenefits = () => {
-    const [benefits, setBenefits] = useState<Benefit[]>(initialBenefits);
+    const filePath = `benefits/${Date.now()}-${compressedFile.name}`;
+    const { data, error } = await supabase.storage
+        .from('images')
+        .upload(filePath, compressedFile);
+
+    if (error) {
+        console.error('Error uploading image:', error);
+        throw error;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(data.path);
+    return publicUrl;
+};
+
+export function useBenefits() {
+    const [data, setData] = useState<Benefit[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<Error | null>(null);
     const [isInitialized, setIsInitialized] = useState(false);
 
-    useEffect(() => {
-        try {
-            const storedBenefits = localStorage.getItem(BENEFITS_STORAGE_KEY);
-            const storedVersion = localStorage.getItem(BENEFITS_VERSION_KEY);
-            const newVersion = String(generateChecksum(initialBenefits));
+    const fetchBenefits = useCallback(async () => {
+        setIsLoading(true);
+        const { data, error } = await supabase
+            .from('benefits')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-            // If no benefits stored OR version changed → reload from defaults
-            if (!storedBenefits || storedVersion !== newVersion) {
-                localStorage.setItem(BENEFITS_STORAGE_KEY, JSON.stringify(initialBenefits));
-                localStorage.setItem(BENEFITS_VERSION_KEY, newVersion);
-                setBenefits(initialBenefits);
-            } else {
-                setBenefits(JSON.parse(storedBenefits));
-            }
-        } catch (error) {
-            console.error("Failed to access or parse benefits from localStorage", error);
-            setBenefits(initialBenefits);
+        if (error) {
+            console.error("Error fetching benefits:", error);
+            setError(error as unknown as Error);
+        } else {
+            setData(data as Benefit[]);
         }
-        setIsInitialized(true);
-    }, []);
-
-    const addBenefit = useCallback((newBenefitData: Omit<Benefit, 'id' | 'imageId'> & { imageId?: string, redirectUrl?: string }) => {
-        if (!isInitialized) return;
-
-        setBenefits(prevBenefits => {
-            const newBenefit: Benefit = {
-                ...newBenefitData,
-                id: new Date().toISOString(),
-                imageId: newBenefitData.imageId || `benefit-${Math.floor(Math.random() * 5) + 1}`,
-                redirectUrl: newBenefitData.redirectUrl,
-            };
-            const updatedBenefits = [...prevBenefits, newBenefit];
-            localStorage.setItem(BENEFITS_STORAGE_KEY, JSON.stringify(updatedBenefits));
-            return updatedBenefits;
-        });
+        setIsLoading(false);
+        if (!isInitialized) setIsInitialized(true);
     }, [isInitialized]);
 
-    const removeBenefit = useCallback((benefitId: string) => {
-        if (!isInitialized) return;
+    useEffect(() => {
+        fetchBenefits();
+    }, [fetchBenefits]);
 
-        setBenefits(prevBenefits => {
-            const updatedBenefits = prevBenefits.filter(b => b.id !== benefitId);
-            localStorage.setItem(BENEFITS_STORAGE_KEY, JSON.stringify(updatedBenefits));
-            return updatedBenefits;
-        });
-    }, [isInitialized]);
+    const add = async (benefit: Omit<Benefit, 'id' | 'imageUrl' | 'created_at'>, imageFile: File) => {
+        const imageUrl = await uploadImage(imageFile);
+        
+        const { data: newData, error } = await supabase
+            .from('benefits')
+            .insert([{ ...benefit, imageUrl }])
+            .select()
+            .single();
 
-    const safeBenefits = isInitialized ? benefits : [];
+        if (error) throw error;
+        if (newData) setData(prevData => [newData, ...prevData]);
+    };
+    
+    const remove = async (id: string) => {
+        const { error } = await supabase.from('benefits').delete().eq('id', id);
+        if (error) throw error;
+        fetchBenefits(); // Refetch
+    };
 
-    return { benefits: safeBenefits, addBenefit, removeBenefit, isInitialized };
-};
+    const update = async (id: string, updatedBenefit: Partial<Omit<Benefit, 'id' | 'created_at'>>, imageFile?: File) => {
+        let imageUrl = updatedBenefit.imageUrl;
+        if (imageFile) {
+            imageUrl = await uploadImage(imageFile);
+        }
+        
+        const { data: updatedData, error } = await supabase
+            .from('benefits')
+            .update({ ...updatedBenefit, imageUrl })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        fetchBenefits(); // Refetch
+    };
+
+    return {
+        data,
+        isLoading,
+        error,
+        isInitialized,
+        add,
+        remove,
+        update,
+    };
+}

@@ -1,72 +1,114 @@
-"use client";
+
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { initialClubs, type Club } from '../lib/data';
+import { supabase } from '../lib/supabaseClient';
+import imageCompression from 'browser-image-compression';
 
-const CLUBS_STORAGE_KEY = 'oncampus-clubs';
-const CLUBS_VERSION_KEY = 'oncampus-clubs-version';
+export interface Club {
+  id: string;
+  created_at: string;
+  name: string;
+  category: string;
+  description: string;
+  imageUrl: string;
+  instagramUrl?: string;
+  linkedinUrl?: string;
+}
 
-// Simple checksum function to detect data changes
-const generateChecksum = (data: any) => JSON.stringify(data).length;
-
-export const useClubs = () => {
-  const [clubs, setClubs] = useState<Club[]>(initialClubs);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  useEffect(() => {
-    try {
-      const storedClubs = localStorage.getItem(CLUBS_STORAGE_KEY);
-      const storedVersion = localStorage.getItem(CLUBS_VERSION_KEY);
-
-      const newVersion = String(generateChecksum(initialClubs));
-
-      // If version changed or no stored clubs → refresh with new data
-      if (!storedClubs || storedVersion !== newVersion) {
-        localStorage.setItem(CLUBS_STORAGE_KEY, JSON.stringify(initialClubs));
-        localStorage.setItem(CLUBS_VERSION_KEY, newVersion);
-        setClubs(initialClubs);
-      } else {
-        setClubs(JSON.parse(storedClubs));
-      }
-    } catch (error) {
-      console.error("Failed to load clubs from localStorage", error);
-      setClubs(initialClubs);
+const uploadImage = async (file: File): Promise<string> => {
+    const options = {
+        maxSizeMB: 1,
+        maxWidthOrHeight: 1920,
+        useWebWorker: true,
     }
-    setIsInitialized(true);
-  }, []);
 
-  const addClub = useCallback(
-    (newClubData: Omit<Club, 'id' | 'imageId'> & { imageId?: string }) => {
-      if (!isInitialized) return;
+    const compressedFile = await imageCompression(file, options);
+    
+    const filePath = `clubs/${Date.now()}-${compressedFile.name}`;
+    const { data, error } = await supabase.storage
+        .from('images')
+        .upload(filePath, compressedFile);
 
-      setClubs(prevClubs => {
-        const newClub: Club = {
-          ...newClubData,
-          id: new Date().toISOString(),
-          imageId: newClubData.imageId || `club-${Math.floor(Math.random() * 5) + 1}`,
-        };
-        const updatedClubs = [...prevClubs, newClub];
-        localStorage.setItem(CLUBS_STORAGE_KEY, JSON.stringify(updatedClubs));
-        return updatedClubs;
-      });
-    },
-    [isInitialized]
-  );
+    if (error) {
+        console.error('Error uploading image:', error);
+        throw error;
+    }
 
-  const removeClub = useCallback(
-    (clubId: string) => {
-      if (!isInitialized) return;
-
-      setClubs(prevClubs => {
-        const updatedClubs = prevClubs.filter(c => c.id !== clubId);
-        localStorage.setItem(CLUBS_STORAGE_KEY, JSON.stringify(updatedClubs));
-        return updatedClubs;
-      });
-    },
-    [isInitialized]
-  );
-
-  const safeClubs = isInitialized ? clubs : [];
-
-  return { clubs: safeClubs, addClub, removeClub, isInitialized };
+    const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(data.path);
+    return publicUrl;
 };
+
+export function useClubs() {
+    const [data, setData] = useState<Club[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<Error | null>(null);
+    const [isInitialized, setIsInitialized] = useState(false);
+
+    const fetchClubs = useCallback(async () => {
+        setIsLoading(true);
+        const { data, error } = await supabase
+            .from('clubs')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error("Error fetching clubs:", error);
+            setError(error as unknown as Error);
+        } else {
+            setData(data as Club[]);
+        }
+        setIsLoading(false);
+        if (!isInitialized) setIsInitialized(true);
+    }, [isInitialized]);
+
+    useEffect(() => {
+        fetchClubs();
+    }, [fetchClubs]);
+
+    const add = async (club: Omit<Club, 'id' | 'imageUrl' | 'created_at'>, imageFile: File) => {
+        const imageUrl = await uploadImage(imageFile);
+        const { data: newData, error } = await supabase
+            .from('clubs')
+            .insert([{ ...club, imageUrl }])
+            .select()
+            .single();
+
+        if (error) throw error;
+        if (newData) setData(prevData => [newData, ...prevData]);
+    };
+    
+    const remove = async (id: string) => {
+        const { error } = await supabase.from('clubs').delete().eq('id', id);
+        if (error) throw error;
+        fetchClubs(); // Refetch
+    };
+
+    const update = async (id: string, updatedClub: Partial<Omit<Club, 'id' | 'created_at'>>, imageFile?: File) => {
+        let imageUrl = updatedClub.imageUrl;
+        if (imageFile) {
+            imageUrl = await uploadImage(imageFile);
+        }
+
+        const { data: updatedData, error } = await supabase
+            .from('clubs')
+            .update({ ...updatedClub, imageUrl })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        fetchClubs(); // Refetch
+    };
+
+
+  return {
+    data,
+    isLoading,
+    error,
+    add,
+    remove,
+    update,
+    isInitialized,
+  };
+}

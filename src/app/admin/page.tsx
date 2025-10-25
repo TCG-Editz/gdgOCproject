@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -11,14 +12,13 @@ import {
   CardTitle,
 } from "../../components/ui/card";
 import { useToast } from "../../hooks/use-toast";
-import { LogOut, ArrowLeft } from "lucide-react";
+import { LogOut, ArrowLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import AdminEventsTab from "../../components/admin-events-tab";
 import AdminClubsTab from "../../components/admin-clubs-tab";
 import AdminBenefitsTab from "../../components/admin-benefits-tab";
-
-const AUTH_KEY = "oncampus_auth";
+import { supabase } from "../../lib/supabaseClient";
 
 export default function AdminPage() {
   const router = useRouter();
@@ -26,16 +26,19 @@ export default function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   useEffect(() => {
-    const authStatus = localStorage.getItem(AUTH_KEY) === "true";
-    if (!authStatus) {
-      router.replace("/login");
-    } else {
-      setIsAuthenticated(true);
-    }
+    const checkSession = async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (error || !data.session) {
+        router.replace("/login");
+      } else {
+        setIsAuthenticated(true);
+      }
+    };
+    checkSession();
   }, [router]);
 
-  const handleLogout = () => {
-    localStorage.removeItem(AUTH_KEY);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     toast({
       title: "Logged Out",
       description: "You have been successfully logged out.",
@@ -44,7 +47,11 @@ export default function AdminPage() {
   };
 
   if (!isAuthenticated) {
-    return null; // Don't render anything until authenticated
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (
@@ -73,11 +80,11 @@ export default function AdminPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <Tabs defaultValue="events" className="w-full">
+                    <Tabs defaultValue="benefits" className="w-full">
                         <TabsList className="grid w-full grid-cols-3">
-                            <TabsTrigger value="events">Events</TabsTrigger>
-                            <TabsTrigger value="clubs">Clubs</TabsTrigger>
                             <TabsTrigger value="benefits">Benefits</TabsTrigger>
+                            <TabsTrigger value="clubs">Clubs</TabsTrigger>
+                            <TabsTrigger value="events">Events</TabsTrigger>
                         </TabsList>
                         <TabsContent value="events">
                             <AdminEventsTab />

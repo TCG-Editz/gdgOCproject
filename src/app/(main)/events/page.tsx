@@ -1,126 +1,207 @@
+
 "use client";
 
 import Image from 'next/image';
-import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../../components/ui/card';
 import { useEvents } from '../../../hooks/use-events';
-import { PlaceHolderImages } from '../../../lib/placeholder-images';
 import { format } from 'date-fns';
-import { Calendar, MapPin } from 'lucide-react';
-import { Icons } from '../../../components/icons'; // 👈 import Icons for logo
+import { Calendar as CalendarIcon, MapPin, Loader2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Calendar } from '../../../components/ui/calendar';
+import { Button } from '../../../components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '../../../components/ui/dialog';
+import { Skeleton } from '../../../components/ui/skeleton';
 
 export default function EventsPage() {
-  const { events } = useEvents();
+  const { data: events, isLoading: isEventsLoading } = useEvents();
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
 
-  // Sort events by date, future events first
-  const sortedEvents = [...events].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  // Consolidate date conversion at the beginning
+  const processedEvents = useMemo(() => {
+    return events.map(event => ({
+      ...event,
+      dateObj: new Date(event.date),
+    })).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+  }, [events]);
+
+  const googleColors = ['#4285F4', '#DB4437', '#F4B400', '#0F9D58'];
+
+  const eventModifiers = useMemo(() => {
+    const modifiers: Record<string, Date[]> = {
+        googleBlue: [],
+        googleRed: [],
+        googleYellow: [],
+        googleGreen: [],
+    };
+    const colorMap: Record<string, string> = {
+        '#4285F4': 'googleBlue',
+        '#DB4437': 'googleRed',
+        '#F4B400': 'googleYellow',
+        '#0F9D58': 'googleGreen',
+    };
+    const eventDates = new Set<string>();
+
+    processedEvents.forEach(event => {
+      const dateString = format(event.dateObj, 'yyyy-MM-dd');
+      
+      if (!eventDates.has(dateString)) {
+        const dayOfMonth = event.dateObj.getDate();
+        const colorIndex = dayOfMonth % googleColors.length;
+        const stableColor = googleColors[colorIndex];
+        const modifierClass = colorMap[stableColor];
+
+        if (modifierClass) {
+            modifiers[modifierClass].push(event.dateObj);
+        }
+        eventDates.add(dateString);
+      }
+    });
+    return modifiers;
+  }, [processedEvents]);
+
+
+  const filteredEvents = selectedDate
+    ? processedEvents.filter(event => {
+        return format(event.dateObj, 'yyyy-MM-dd') === format(selectedDate, 'yyyy-MM-dd');
+      })
+    : processedEvents;
+
 
   return (
-    <div className="flex flex-col min-h-screen">
-      <main className="flex-grow container mx-auto">
-        <div className="mb-12">
-          <h1 className="font-headline text-4xl font-extrabold tracking-tight lg:text-5xl">
-            Current/Upcoming Events
-          </h1>
-          <p className="mt-3 text-xl text-foreground/70">
-            Workshops, seminars, and fests happening around you.
-          </p>
-        </div>
+    <div className="container mx-auto">
+      <div className="mb-12">
+        <h1 className="font-headline text-4xl font-extrabold tracking-tight lg:text-5xl">
+          Campus Events
+        </h1>
+        <p className="mt-3 text-xl text-foreground/70">
+          Workshops, seminars, and fests happening around you.
+        </p>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {sortedEvents.map((event) => {
-            const isUrl = event.imageId.startsWith('http');
-            const image = !isUrl ? PlaceHolderImages.find(p => p.id === event.imageId) : null;
-            const imageUrl = isUrl ? event.imageId : image?.imageUrl;
-            const imageHint = image?.imageHint;
-            const eventDate = new Date(event.date);
-
-            return (
-              <Card
-                key={event.id}
-                className="flex flex-col md:flex-row overflow-hidden transform transition-all duration-300 hover:shadow-2xl hover:-translate-y-1"
-              >
-                <div className="relative h-48 md:h-auto md:w-1/3">
-                  {imageUrl && (
-                    <Image
-                      src={imageUrl}
-                      alt={event.title}
-                      fill
-                      className="object-cover md:rounded-l-lg md:rounded-r-none rounded-t-lg"
-                      data-ai-hint={imageHint}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="md:col-span-1">
+            <Card>
+                <CardContent className="p-0 flex justify-center">
+                    <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        className="rounded-md"
+                        modifiers={eventModifiers}
+                        modifiersClassNames={{
+                            googleBlue: 'day-google-blue',
+                            googleRed: 'day-google-red',
+                            googleYellow: 'day-google-yellow',
+                            googleGreen: 'day-google-green',
+                        }}
                     />
-                  )}
-                </div>
-                <div className="flex flex-col flex-1">
-                  <CardHeader>
-                    <CardTitle className="font-headline text-xl">{event.title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex-grow flex flex-col justify-between">
-                    <p className="text-sm text-foreground/80 mb-4">{event.description}</p>
-                    <div className="space-y-2 text-sm text-foreground/70">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4" />
-                        <span>{format(eventDate, "MMMM d, yyyy 'at' h:mm a")}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4" />
-                        <span>{event.location}</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </div>
-              </Card>
-            );
-          })}
+                </CardContent>
+            </Card>
+            {selectedDate && (
+              <Button onClick={() => setSelectedDate(undefined)} className="w-full mt-4">
+                View All Events
+              </Button>
+            )}
         </div>
-      </main>
+        <div className="md:col-span-2 space-y-8">
+            {isEventsLoading ? (
+                <div className="space-y-8">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                        <Card key={i} className="flex flex-col md:flex-row">
+                             <Skeleton className="relative h-48 md:h-auto md:w-1/3" />
+                             <div className="flex flex-col flex-1 p-6">
+                                <Skeleton className="h-6 w-3/4 mb-4" />
+                                <Skeleton className="h-4 w-full mb-2" />
+                                <Skeleton className="h-4 w-full mb-4" />
+                                <Skeleton className="h-5 w-1/4 mb-4" />
+                                <Skeleton className="h-5 w-1/3 mb-4" />
+                                <Skeleton className="h-10 w-1/2 mt-auto" />
+                             </div>
+                        </Card>
+                    ))}
+                </div>
+            ) : filteredEvents.length > 0 ? (
+                filteredEvents.map((event) => {
+                const eventDate = event.dateObj;
 
-      {/* ✅ Reused Footer */}
-      <footer className="bg-gray-100 dark:bg-gray-900 border-t border-border/40">
-  <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-      {/* Left: Logo */}
-      <div className="flex items-center gap-2">
-        <Icons.logo />
+                return (
+                    <Card key={event.id} className="flex flex-col md:flex-row overflow-hidden transform transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
+                        <div className="relative h-48 md:h-auto md:w-1/3">
+                            {event.imageUrl && (
+                            <Image
+                                src={event.imageUrl}
+                                alt={event.title}
+                                fill
+                                className="object-cover md:rounded-l-lg md:rounded-r-none rounded-t-lg"
+                            />
+                            )}
+                        </div>
+                        <div className="flex flex-col flex-1 p-6">
+                            <CardHeader className="p-0">
+                                <CardTitle className="font-headline text-xl">{event.title}</CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-0 flex-grow flex flex-col justify-between mt-4">
+                            <p className="text-sm text-foreground/80 mb-4 line-clamp-2">{event.description}</p>
+                            <div className="space-y-2 text-sm text-foreground/70 mb-4">
+                                <div className="flex items-center gap-2">
+                                <CalendarIcon className="h-4 w-4" />
+                                <span>{format(eventDate, "MMMM d, yyyy 'at' h:mm a")}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                <MapPin className="h-4 w-4" />
+                                <span>{event.location}</span>
+                                </div>
+                            </div>
+                             <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="outline" className="mt-auto">Learn More</Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[600px] bg-card">
+                                  <DialogHeader>
+                                    <div className="relative h-64 w-full rounded-lg overflow-hidden mb-4">
+                                      {event.imageUrl && (
+                                        <Image
+                                          src={event.imageUrl}
+                                          alt={event.title}
+                                          fill
+                                          className="object-cover"
+                                        />
+                                      )}
+                                    </div>
+                                    <DialogTitle className="font-headline text-2xl">{event.title}</DialogTitle>
+                                    <DialogDescription className="space-y-2 text-md text-foreground/70 pt-2">
+                                        <div className="flex items-center gap-2">
+                                            <CalendarIcon className="h-4 w-4" />
+                                            <span>{format(eventDate, "MMMM d, yyyy 'at' h:mm a")}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <MapPin className="h-4 w-4" />
+                                            <span>{event.location}</span>
+                                        </div>
+                                    </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="py-4 text-foreground/80">
+                                    <p>{event.description}</p>
+                                  </div>
+                                  <DialogFooter>
+                                    <Button type="button" variant="secondary" disabled>RSVP (Placeholder)</Button>
+                                  </DialogFooter>
+                                </DialogContent>
+                              </Dialog>
+                            </CardContent>
+                        </div>
+                    </Card>
+                );
+                })
+            ) : (
+                <div className="text-center py-16">
+                    <p className="text-lg text-foreground/70">
+                        {selectedDate ? "No events found for this date." : "No upcoming events."}
+                    </p>
+                </div>
+            )}
+        </div>
       </div>
-
-      {/* Right: Text */}
-      <div className="text-center md:text-right">
-        <p className="text-sm text-foreground/60">
-          © {new Date().getFullYear()} GDGoC IET DAVV.  All rights reserved.
-        </p>
-        <p className="text-sm text-foreground/60 mt-1">
-          Crafted with ❤️ by{" "}
-          <Link
-            href="https://www.linkedin.com/in/prakrat-porwal-4688b3385?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app"
-            target="_blank"
-            className="text-primary font-medium hover:underline transition-colors"
-          >
-            Prakrat
-          </Link>
-          {", "}
-          <Link
-            href="https://www.linkedin.com/in/manan-chimnani?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app"
-            target="_blank"
-            className="text-primary font-medium hover:underline transition-colors"
-          >
-            Manan
-          </Link>
-          {" & "}
-          <Link
-            href="https://www.linkedin.com/in/atharv-porwal-354149381?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app"
-            target="_blank"
-            className="text-primary font-medium hover:underline transition-colors"
-          >
-            Atharv
-          </Link>
-        </p>
-      </div>
-    </div>
-  </div>
-</footer>
     </div>
   );
 }

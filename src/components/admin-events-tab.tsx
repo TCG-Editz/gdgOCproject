@@ -1,167 +1,324 @@
-
 "use client";
 
+import { useState } from "react";
 import { useForm, type SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { format } from "date-fns";
 import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from "./ui/dialog";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "./ui/form";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "./ui/form";
 import { useToast } from "../hooks/use-toast";
-import { useEvents } from "../hooks/use-events";
-import { Calendar as CalendarIcon, PlusCircle, Trash2 } from "lucide-react";
-import { cn } from "../lib/utils";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "./ui/popover";
+import { type CampusEvent, useEvents } from "../hooks/use-events";
+import { PlusCircle, Edit, Trash2, Loader2, Image as ImageIcon, CalendarIcon } from "lucide-react";
+import { ScrollArea } from "./ui/scroll-area";
+import Image from "next/image";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "./ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Calendar } from "./ui/calendar";
-import { format } from "date-fns";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "./ui/card";
-import { useEffect } from "react";
+import { cn } from "../lib/utils";
+import { Skeleton } from "./ui/skeleton";
 
+// ----------------- Form Schema -----------------
 const FormSchema = z.object({
+  id: z.string().optional(),
   title: z.string().min(3, "Title must be at least 3 characters long."),
   location: z.string().min(2, "Location is required."),
-  description: z
-    .string()
-    .min(10, "Description must be at least 10 characters long."),
-  date: z.date({
-    required_error: "A date for the event is required.",
-  }),
-  imageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
+  description: z.string().min(10, "Description must be at least 10 characters long."),
+  date: z.date({ required_error: "A date for the event is required." }),
+  imageFile: z.instanceof(File).optional(),
+  imageUrl: z.string().optional(),
 });
 
 type FormData = z.infer<typeof FormSchema>;
 
+// ----------------- Component -----------------
 export default function AdminEventsTab() {
+  const { data: events, isLoading, add, remove, update, isInitialized } = useEvents();
   const { toast } = useToast();
-  const { events, addEvent, removeEvent, isInitialized } = useEvents();
 
-  const form = useForm<FormData>({
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  const addForm = useForm<FormData>({
     resolver: zodResolver(FormSchema),
-    defaultValues: {
-        title: "",
-        location: "",
-        description: "",
-        imageUrl: "",
-    }
+    defaultValues: { title: "", location: "", description: "" },
   });
 
-  useEffect(() => {
-    form.reset({
-      title: "",
-      location: "",
-      description: "",
-      date: new Date(),
-      imageUrl: "",
-    });
-  }, [form]);
+  const editForm = useForm<FormData>({
+    resolver: zodResolver(FormSchema),
+  });
 
-
-  const onSubmit: SubmitHandler<FormData> = (data) => {
-    addEvent({
-      ...data,
-      date: data.date.toISOString(),
-      imageId: data.imageUrl || '',
-    });
-    toast({
-      title: "Event Created!",
-      description: `"${data.title}" has been added to the calendar.`,
-    });
-    form.reset();
+  // ----------------- Image Preview -----------------
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, form: typeof addForm | typeof editForm) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      form.setValue("imageFile", file);
+      const reader = new FileReader();
+      reader.onloadend = () => setImagePreview(reader.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
+  // ----------------- Add Event -----------------
+  const handleAddSubmit: SubmitHandler<FormData> = async (formData) => {
+    try {
+      const { imageFile, ...data } = formData;
+
+      if (!imageFile) {
+        addForm.setError("imageFile", { type: "manual", message: "An image is required." });
+        return;
+      }
+
+      const eventData: Omit<CampusEvent, "id" | "created_at" | "imageUrl"> = {
+        ...data,
+        date: data.date.toISOString(), // convert Date -> string
+      };
+
+      await add(eventData, imageFile);
+
+      toast({ title: "Event Added", description: `"${data.title}" has been successfully created.` });
+      addForm.reset();
+      setImagePreview(null);
+      setIsAddDialogOpen(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast({ variant: "destructive", title: "Uh oh! Something went wrong.", description: errorMessage });
+    }
+  };
+
+  // ----------------- Edit Event -----------------
+  const handleEditSubmit: SubmitHandler<FormData> = async (formData) => {
+    try {
+      const { id, imageFile, ...data } = formData;
+      if (!id) throw new Error("ID not found");
+
+      const updatedEvent: Omit<CampusEvent, "id" | "created_at" | "imageUrl"> = {
+        ...data,
+        date: data.date.toISOString(), // convert Date -> string
+      };
+
+      await update(id, updatedEvent, imageFile);
+      toast({ title: "Event Updated", description: `"${data.title}" has been successfully updated.` });
+      setIsEditDialogOpen(false);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast({ variant: "destructive", title: "Uh oh! Something went wrong.", description: errorMessage });
+    }
+  };
+
+  // ----------------- Delete Event -----------------
+  const handleDeleteClick = async (item: CampusEvent) => {
+    try {
+      await remove(item.id);
+      toast({ title: "Event Removed", description: `"${item.title}" has been successfully removed.` });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast({ variant: "destructive", title: "Uh oh! Something went wrong.", description: errorMessage });
+    }
+  };
+
+  // ----------------- Dialog Controls -----------------
+  const openEditDialog = (item: CampusEvent) => {
+    editForm.reset({
+      ...item,
+      date: new Date(item.date), // convert string -> Date
+    });
+    setImagePreview(item.imageUrl || null);
+    setIsEditDialogOpen(true);
+  };
+
+  const openAddDialog = () => {
+    addForm.reset({ title: "", location: "", description: "" });
+    setImagePreview(null);
+    setIsAddDialogOpen(true);
+  };
+
+  // ----------------- JSX -----------------
   return (
-    <div className="space-y-6 pt-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <PlusCircle />
-            Add New Event
-          </CardTitle>
-          <CardDescription>
-            Fill in the details to add a new event to the calendar. You can use a site like ImgBB to upload images and get a URL.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
+    <div>
+      {/* Add Event Dialog */}
+      <div className="flex justify-end mb-4">
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+            <Button onClick={openAddDialog} className="btn-animated-gradient w-48">
+              <PlusCircle className="mr-2" /> Add Event
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[625px]">
+            <DialogHeader>
+              <DialogTitle>Add New Event</DialogTitle>
+              <DialogDescription>Fill in the details for the new campus event.</DialogDescription>
+            </DialogHeader>
+            <Form {...addForm}>
+              <form onSubmit={addForm.handleSubmit(handleAddSubmit)} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Title */}
+                  <FormField control={addForm.control} name="title" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Event Title</FormLabel>
+                      <FormControl><Input placeholder="e.g., Annual Tech Fest" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  {/* Location */}
+                  <FormField control={addForm.control} name="location" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Location</FormLabel>
+                      <FormControl><Input placeholder="e.g., Main Auditorium" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  {/* Date */}
+                  <FormField control={addForm.control} name="date" render={({ field }) => (
+                    <FormItem className="flex flex-col md:col-span-2">
+                      <FormLabel>Date of Event</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button variant="outline" className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                              {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  {/* Description */}
+                  <FormField control={addForm.control} name="description" render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Description</FormLabel>
+                      <FormControl><Textarea rows={3} placeholder="A brief summary of the event..." {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  {/* Image */}
+                  <FormField control={addForm.control} name="imageFile" render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Event Image</FormLabel>
+                      <FormControl>
+                        <Input type="file" accept="image/*" onChange={(e) => handleImageChange(e, addForm)} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  {imagePreview && (
+                    <div className="md:col-span-2 relative h-48 w-full rounded-md overflow-hidden">
+                      <Image src={imagePreview} alt="Image preview" fill style={{ objectFit: 'contain' }} />
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="ghost" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
+                  <Button type="submit" disabled={addForm.formState.isSubmitting}>
+                    {addForm.formState.isSubmitting && <Loader2 className="mr-2 animate-spin" />}
+                    Add Event
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {/* Events List */}
+      <ScrollArea className="h-96 pr-4">
+        <div className="space-y-2">
+          {isLoading && !isInitialized ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between p-3 rounded-lg border bg-card">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <div className="flex gap-2">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </div>
+              </div>
+            ))
+          ) : (
+            events.map((item) => (
+              <div key={item.id} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-4">
+                  <div className="relative h-12 w-12 rounded-md overflow-hidden bg-muted">
+                    {item.imageUrl ? <Image src={item.imageUrl} alt={item.title} fill style={{ objectFit: 'cover'}} /> : <div className="flex h-full w-full items-center justify-center"><ImageIcon className="text-muted-foreground" /></div>}
+                  </div>
+                  <div>
+                    <p className="font-semibold">{item.title}</p>
+                    <p className="text-sm text-muted-foreground">{format(new Date(item.date), "PPP")}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon" onClick={() => openEditDialog(item)}><Edit className="h-4 w-4" /></Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive/80"><Trash2 className="h-4 w-4" /></Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>This will permanently delete the event "{item.title}". This action cannot be undone.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => handleDeleteClick(item)}>Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Edit Event Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[625px]">
+          <DialogHeader>
+            <DialogTitle>Edit Event</DialogTitle>
+            <DialogDescription>Update the details for this event.</DialogDescription>
+          </DialogHeader>
+          <Form {...editForm}>
+            <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField control={editForm.control} name="title" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Event Title</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Annual Tech Fest" {...field} />
-                    </FormControl>
+                    <FormControl><Input {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
-                )}
-              />
-               <FormField
-                control={form.control}
-                name="imageUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Image URL</FormLabel>
-                    <FormControl>
-                      <Input placeholder="https://example.com/image.png" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="location"
-                render={({ field }) => (
+                )} />
+                <FormField control={editForm.control} name="location" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Location</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Main Auditorium" {...field} />
-                    </FormControl>
+                    <FormControl><Input {...field} /></FormControl>
                     <FormMessage />
                   </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="date"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Event Date & Time</FormLabel>
+                )} />
+                <FormField control={editForm.control} name="date" render={({ field }) => (
+                  <FormItem className="flex flex-col md:col-span-2">
+                    <FormLabel>Date of Event</FormLabel>
                     <Popover>
                       <PopoverTrigger asChild>
                         <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
+                          <Button variant="outline" className={cn("pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
+                            {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
                             <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                           </Button>
                         </FormControl>
@@ -171,71 +328,47 @@ export default function AdminEventsTab() {
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) =>
-                            date < new Date() || date < new Date("1900-01-01")
-                          }
+                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
                           initialFocus
                         />
                       </PopoverContent>
                     </Popover>
                     <FormMessage />
                   </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
+                )} />
+                <FormField control={editForm.control} name="description" render={({ field }) => (
+                  <FormItem className="md:col-span-2">
                     <FormLabel>Description</FormLabel>
+                    <FormControl><Textarea rows={3} {...field} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={editForm.control} name="imageFile" render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Change Image (Optional)</FormLabel>
                     <FormControl>
-                      <Textarea
-                        rows={3}
-                        placeholder="Describe the event..."
-                        {...field}
-                      />
+                      <Input type="file" accept="image/*" onChange={(e) => handleImageChange(e, editForm)} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
+                )} />
+                {imagePreview && (
+                  <div className="md:col-span-2 relative h-48 w-full rounded-md overflow-hidden">
+                    <Image src={imagePreview} alt="Image preview" fill style={{ objectFit: 'contain' }} />
+                  </div>
                 )}
-              />
-              <Button type="submit" className="w-full" disabled={!isInitialized}>
-                Create Event
-              </Button>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="ghost" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
+                <Button type="submit" disabled={editForm.formState.isSubmitting}>
+                  {editForm.formState.isSubmitting && <Loader2 className="mr-2 animate-spin" />}
+                  Save Changes
+                </Button>
+              </DialogFooter>
             </form>
           </Form>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Existing Events</CardTitle>
-          <CardDescription>
-            Here is a list of all current events.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ul className="space-y-4">
-            {events.map((event) => (
-              <li
-                key={event.id}
-                className="flex items-center justify-between rounded-md border p-4"
-              >
-                <div>
-                  <p className="font-semibold">{event.title}</p>
-                   <p className="text-sm text-muted-foreground">{format(new Date(event.date), "PPP")}</p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeEvent(event.id)}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
